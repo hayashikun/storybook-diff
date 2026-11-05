@@ -1,0 +1,133 @@
+name: 'Storybook Diff'
+description: >-
+  Storybook story diff visualizer — base / head の storybook build (静的 HTML)
+  を比較し、差分画像ギャラリー (index.html)・PR コメント用 summary.md・
+  機械処理用 result.json を生成する
+branding:
+  icon: 'eye'
+  color: 'gray-dark'
+
+inputs:
+  base-static:
+    description: 'base の storybook-static ディレクトリ'
+    required: true
+  head-static:
+    description: 'head の storybook-static ディレクトリ'
+    required: true
+  out:
+    description: '出力先ディレクトリ (index.html / summary.md / result.json / shots/)'
+    required: true
+  changed-files:
+    description: >-
+      変更ファイル一覧 (1 行 1 パス) を書いたファイルのパス。
+      未指定の場合はレンダリングをスキップして空レポートを生成する
+    required: false
+    default: ''
+  head-stats:
+    description: >-
+      turbosnap の preview-stats.json のパス
+      (既定: <head-static>/preview-stats.json)
+    required: false
+    default: ''
+  concurrency:
+    description: 'レンダリング並列数'
+    required: false
+    default: '6'
+  workspace-dir:
+    description: 'モノレポのワークスペースディレクトリ名 (パス正規化・パッケージ判定に使う)'
+    required: false
+    default: 'packages'
+  global-paths:
+    description: >-
+      配下の変更で全 story を差分対象にするパスプレフィックス (カンマ区切り)
+    required: false
+    default: '.storybook/'
+  dist-boundary-packages:
+    description: >-
+      ビルド済み dist 経由で参照される共有パッケージのプレフィックス (カンマ区切り)。
+      配下の story・テスト以外の変更で全 story を差分対象にする
+    required: false
+    default: ''
+  reuse-page:
+    description: >-
+      同じ story ファイル内では読み込み済みの iframe.html 上で story を切り替えて描画するか。
+      'false' で story ごとに iframe.html を読み込み直す (遅いが前の story の状態を持ち越さない)
+    required: false
+    default: 'true'
+  pr-title:
+    description: 'ギャラリーヘッダに表示する PR タイトル'
+    required: false
+    default: ''
+  pr-url:
+    description: 'ギャラリーヘッダからリンクする PR の URL'
+    required: false
+    default: ''
+  node-version:
+    description: >-
+      cli.ts の実行に使う Node.js バージョン (>= 24 が必要)。
+      空文字を渡すと setup-node をスキップし、ジョブの node をそのまま使う
+    required: false
+    default: '24'
+  install-browser:
+    description: >-
+      Playwright Chromium をインストールするか。
+      ~/.cache/ms-playwright に該当バージョンがキャッシュ済みならほぼ no-op
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      if: inputs.node-version != ''
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install storybook-diff dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      # Use the pnpm version from package.json's packageManager via npx, not pnpm/action-setup, so pnpm isn't added to the caller's PATH
+      run: npx --yes "$(node -p "require('./package.json').packageManager")" install --prod --frozen-lockfile
+
+    - name: Install Playwright Chromium
+      if: inputs.install-browser == 'true'
+      shell: bash
+      run: |
+        "${{ github.action_path }}/node_modules/.bin/playwright" install --with-deps chromium
+
+    - name: Run storybook-diff
+      shell: bash
+      env:
+        SD_BASE_STATIC: ${{ inputs.base-static }}
+        SD_HEAD_STATIC: ${{ inputs.head-static }}
+        SD_OUT: ${{ inputs.out }}
+        SD_CHANGED_FILES: ${{ inputs.changed-files }}
+        SD_HEAD_STATS: ${{ inputs.head-stats }}
+        SD_CONCURRENCY: ${{ inputs.concurrency }}
+        SD_WORKSPACE_DIR: ${{ inputs.workspace-dir }}
+        SD_GLOBAL_PATHS: ${{ inputs.global-paths }}
+        SD_DIST_BOUNDARY_PACKAGES: ${{ inputs.dist-boundary-packages }}
+        SD_REUSE_PAGE: ${{ inputs.reuse-page }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        PR_URL: ${{ inputs.pr-url }}
+      run: |
+        args=(
+          --base-static "$SD_BASE_STATIC"
+          --head-static "$SD_HEAD_STATIC"
+          --out "$SD_OUT"
+          --concurrency "$SD_CONCURRENCY"
+          --workspace-dir "$SD_WORKSPACE_DIR"
+          --global-paths "$SD_GLOBAL_PATHS"
+          --reuse-page "$SD_REUSE_PAGE"
+        )
+        if [ -n "$SD_CHANGED_FILES" ]; then
+          args+=(--changed-files "$SD_CHANGED_FILES")
+        fi
+        if [ -n "$SD_HEAD_STATS" ]; then
+          args+=(--head-stats "$SD_HEAD_STATS")
+        fi
+        if [ -n "$SD_DIST_BOUNDARY_PACKAGES" ]; then
+          args+=(--dist-boundary-packages "$SD_DIST_BOUNDARY_PACKAGES")
+        fi
+        node "${{ github.action_path }}/src/cli.ts" "${args[@]}"

@@ -1,0 +1,39 @@
+{
+  "name": "storybook-diff",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Storybook story diff visualizer — base/head の storybook build を比較して差分ギャラリーを生成する",
+  "license": "MIT",
+  "author": "Ryosuke Hayashi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hayashikun/storybook-diff.git"
+  },
+  "keywords": [
+    "storybook",
+    "visual-regression",
+    "github-action",
+    "playwright"
+  ],
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check": "biome check .",
+    "check/fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "dev:gallery": "node --watch-path=src src/dev-gallery.ts"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.62.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.10"
+  }
+}
